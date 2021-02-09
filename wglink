@@ -14,7 +14,7 @@ Controls Wireguard interfaces, configured by ${CONF_DIR}.
 ${CMD} list - shows names of all interfaces managed by ${CMD}.
 ${CMD} create <interface> - create an IP interface, keep it down.
 ${CMD} up <interface> - put the interface online; must have been created.
-${CMD} down <interface> - put the interface offline; must have been created.
+${CMD} down <interface> - put the interface offline; must be up.
 ${CMD} destroy <inerface> - remove the interface; must be down.
 ${CMD} reload <interface> - reload peer files for the interface (wg syncconf).
 ${CMD} status {<interface>} - list status of given or all managed interface(s);
@@ -155,7 +155,7 @@ fi
 if [ "reload" = "$1" ]; then
     IFACE=${2:?"An interface must be specified."}
     STATUS=$(cmd_status ${IFACE})
-    if [ "${STATUS}" = "${IFACE} is absent" ]; then
+    if [ "${STATUS}" = "${IFACE} is up" ] || [ "${STATUS}" = "${IFACE} is down" ]; then
         # Reconfigure peers. No peers is not fatal but we want to warn about it.
         GOT_PEERS=""
         for CFG in $(ls ${CONF_DIR}/${IFACE}/peers/*.conf); do
@@ -166,7 +166,7 @@ if [ "reload" = "$1" ]; then
             echo "Warning: no peers configured."
         fi
     else
-        fail "Interface ${STATUS}, cannot create it."
+        fail "Interface ${STATUS}, cannot reload it."
     fi
     exit 0
 fi
