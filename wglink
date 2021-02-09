@@ -1,0 +1,177 @@
+#!/bin/sh
+
+set -e
+
+# Controls Wireguard interfaces.
+
+CONF_DIR='./etc/wglink'
+CMD=$(basename $0)
+
+if [ -z "$1" ] || [ "--help" = "$1" ] || [ "help" = "$1" ]; then
+    cat <<EOF
+Controls Wireguard interfaces, configured by ${CONF_DIR}.
+
+${CMD} list - shows names of all interfaces managed by ${CMD}.
+${CMD} create <interface> - create an IP interface, keep it down.
+${CMD} up <interface> - put the interface online; must have been created.
+${CMD} down <interface> - put the interface offline; must have been created.
+${CMD} destroy <inerface> - remove the interface; must be down.
+${CMD} reload <interface> - reload peer files for the interface (wg syncconf).
+${CMD} status {<interface>} - list status of given or all managed interface(s);
+  outputs one of the following:
+  "up" - the interface is up and running;
+  "down" - the interface is configured but down;
+  "absent" - the interface is not present (not created);
+  "unknown" - the interface is not managed by ${CMD}.
+${CMD} help - display this message and exit.
+EOF
+    exit 0
+fi
+
+fail() {
+    echo "Error: $@"
+    exit 1
+}
+
+must_exist() {
+    if [ ! -e "$1" ]; then
+        fail "$1 not found, cannot continue."
+    fi
+}
+
+interface_state() {
+    local IFACE=$1
+    local SHOW=$(ip link show type wireguard "${IFACE}" 2>&1)
+    if echo "${SHOW}" | grep -qE '\b'${IFACE}'\b.*\bPOINTOPOINT\b'; then
+        # But is it up?
+        if echo "${SHOW}" | grep -qE '\bPOINTOPOINT\b.*\bUP\b'; then
+            echo "up"
+        else
+            echo "down"
+        fi
+    else
+        echo "absent"
+    fi
+}
+
+cmd_list() {
+    # Only list directories, thay are named after interfaces.
+    for CONF_FILE in $(ls -d ${CONF_DIR}/*/); do
+        basename ${CONF_FILE%%.conf}
+    done
+}
+
+if [ "list" = "$1" ]; then
+    cmd_list && exit 0
+fi
+
+cmd_status() {
+    # S@ has the names of interfaces, always.
+    local KNOWN_IFACES="$(cmd_list)"
+    for IFACE in $@; do
+        if (echo ${KNOWN_IFACES} | grep -qE '\b'${IFACE}'\b'); then
+            echo "${IFACE} is $(interface_state ${IFACE})"
+        else
+            echo "${IFACE} is unknown"
+        fi
+    done
+}
+
+if [ "status" = "$1" ]; then
+    cmd_status ${2:-"$(cmd_list)"} && exit 0
+fi
+
+
+if [ "create" = "$1" ]; then
+    IFACE=${2:?"An interface must be specified."}
+    STATUS=$(cmd_status ${IFACE})
+    if [ "${STATUS}" = "${IFACE} is absent" ]; then
+        # Check necessary files exist.
+        must_exist ${CONF_DIR}/${IFACE}/self.conf
+        must_exist ${CONF_DIR}/${IFACE}/peers/
+        # Create.
+        ip link add dev ${IFACE} type wireguard
+        # Configure peers. No peers is not fatal but we want to warn about it.
+        GOT_PEERS=""
+        for CFG in $(ls ${CONF_DIR}/${IFACE}/peers/*.conf); do
+            wg addconf ${IFACE} ${CFG}
+            GOT_PEERS="yes"
+        done
+        if [ ! GOT_PEERS ]; then
+            echo "Warning: no peers configured."
+        fi
+        # Configure address(es).
+        for IP_FILE in ${CONF_DIR}/${IFACE}/ipv4 ${CONF_DIR}/${IFACE}/ipv6; do
+            if [ -e ${IP_FILE} ]; then
+                ip address add $(cat ${IP_FILE}) dev ${IFACE}
+                # TODO: process a route file, and maybe an ip filter file.
+            fi
+        done
+        # NOTE: No IP is fine, the interface can want to get it by DHCP.
+    else
+        fail "Interface ${STATUS}, cannot create it."
+    fi
+    exit 0
+fi
+
+
+if [ "destroy" = "$1" ]; then
+    IFACE=${2:?"An interface must be specified."}
+    STATUS=$(cmd_status ${IFACE})
+    if [ "${STATUS}" = "${IFACE} is down" ]; then
+        # Deleting the interface removes everything related anyway.
+        ip link delete dev ${IFACE}
+    else
+        fail "Interface ${STATUS}, cannot destroy it."
+    fi
+    exit 0
+fi
+
+
+if [ "up" = "$1" ]; then
+    IFACE=${2:?"An interface must be specified."}
+    STATUS=$(cmd_status ${IFACE})
+    if [ "${STATUS}" = "${IFACE} is down" ]; then
+        ip link set up dev ${IFACE}
+    else
+        fail "Interface ${STATUS}, cannot turn it up."
+    fi
+    exit 0
+fi
+
+
+if [ "down" = "$1" ]; then
+    IFACE=${2:?"An interface must be specified."}
+    STATUS=$(cmd_status ${IFACE})
+    if [ "${STATUS}" = "${IFACE} is up" ]; then
+        ip link set down dev ${IFACE}
+        # TODO: process route files, deleting routes.
+    else
+        fail "Interface ${STATUS}, cannot turn it down."
+    fi
+    exit 0
+fi
+
+if [ "reload" = "$1" ]; then
+    IFACE=${2:?"An interface must be specified."}
+    STATUS=$(cmd_status ${IFACE})
+    if [ "${STATUS}" = "${IFACE} is absent" ]; then
+        # Reconfigure peers. No peers is not fatal but we want to warn about it.
+        GOT_PEERS=""
+        for CFG in $(ls ${CONF_DIR}/${IFACE}/peers/*.conf); do
+            wg syncconf ${IFACE} ${CFG}
+            GOT_PEERS="yes"
+        done
+        if [ ! GOT_PEERS ]; then
+            echo "Warning: no peers configured."
+        fi
+    else
+        fail "Interface ${STATUS}, cannot create it."
+    fi
+    exit 0
+fi
+
+# What was that?
+
+echo "Unrecognized command '$1'. Run '${CMD} help' for reference."
+exit 1
