@@ -1,13 +1,29 @@
 # Control Wireguard interfaces
 
-* Configuration for an interface is in `/etc/wg/<interface>.conf`.
-* Each peer has its own config file under `/etc/wg/<interface>.peers/`.
-* IP addresses assumed fixed.
+* Everything related lives under `/etc/wglink`. All paths below are relative to that.
+* Each managed WG interface is configured by files under `/etc/wglink/<interface>/`.
+* Configuration for the node, the `[Interface]` file, is `<interface>/self.conf`.
+* Each peer has its own config file under `<interface>/peers/*.conf`. Files other than `*.conf` are ignored.
+  Not having any peer files is not an error.
+* IP address(es) can be configured with `<interface>/ipv4` and / or `<interface>/ipv6`; the contents should be a CIDR.
+  If neither exists, no IP address is assigned.
 * Interfaces assumed point to point.
 
-## Wireguard interface contol command: `wglink`
+## The command: `wglink`
 
-* The scripts are under `/usr/local/bin`.
-* `wglink up <interface>`: makes sure that the named interface is up; no-op if already up. Creates it if it's not present.
-* `wglink down <interface>`: makes sure that the named interface is down; no-op if already down.
-* `wglink destroy <inerface>`: destroys the interface, only if it's a Wireguard interface and is down.
+Command summary:
+
+* `wglink list` - shows names of all interfaces managed by `wglink`.
+  Note: any WG interfaces _not_ managed by `wglink` are not shown.
+* `wglink create <interface>` - create an IP interface, keep it down.
+  The interface must not exist, but its configuration files must be in order.
+* `wglink up <interface>` - put the interface online; must be previously down.
+* `wglink down <interface>` - put the interface offline; must be previously up.
+* `wglink destroy <inerface>` - remove the interface; must be previously down.
+* `wglink reload <interface>` - reload peer files for the interface (`wg syncconf`). The interface may be either up or down.
+* `wglink status {<interface>}` - list status of given or all managed interface(s); outputs one of the following:
+  * "up" - the interface is up and running;
+  * "down" - the interface is configured but down;
+  * "absent" - the interface is not present (e.g. not created);
+  * "unknown" - the interface is not managed by `wglink`.
+* `wglink help`- display this message and exit.
