@@ -1,4 +1,6 @@
-# Control Wireguard interfaces
+![This work is public domain](http://i.creativecommons.org/p/mark/1.0/88x31.png)
+
+# `wglink`: control Wireguard interfaces
 
 * Everything related lives under `/etc/wglink`. All paths below are relative to that.
 * Each managed WG interface is configured by files under `/etc/wglink/<interface>/`.
@@ -8,10 +10,9 @@
 * IP address(es) can be configured with `<interface>/ipv4` and / or `<interface>/ipv6`; the contents should be a CIDR.
   If neither exists, no IP address is assigned.
 * Interfaces assumed point to point.
+* Need privileges to run `wg`, `ip link`, and `ip address`; uses `grep`.
 
-## The command: `wglink`
-
-Command summary:
+## Summary of command options
 
 * `wglink list` - shows names of all interfaces managed by `wglink`.
   Note: any WG interfaces _not_ managed by `wglink` are not shown.
