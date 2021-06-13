@@ -91,6 +91,8 @@ if [ "create" = "$1" ]; then
         must_exist ${CONF_DIR}/${IFACE}/peers/
         # Create.
         ip link add dev ${IFACE} type wireguard
+        wg addconf ${IFACE} ${CONF_DIR}/${IFACE}/self.conf
+
         # Configure peers. No peers is not fatal but we want to warn about it.
         GOT_PEERS=""
         for CFG in $(ls ${CONF_DIR}/${IFACE}/peers/*.conf); do
