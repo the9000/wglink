@@ -4,7 +4,7 @@ set -e
 
 # Controls Wireguard interfaces.
 
-CONF_DIR='/etc/wglink'
+CONF_DIR=${WGLINK_CONF_DIR:-'/etc/wglink'}
 CMD=$(basename $0)
 
 if [ -z "$1" ] || [ "--help" = "$1" ] || [ "help" = "$1" ]; then
